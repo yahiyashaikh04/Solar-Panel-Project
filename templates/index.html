@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>🌞 Solar Panel Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: "Segoe UI", Arial, sans-serif; margin:0; background:#f4f7f9; color:#333; }
+    h1 { background:#0077b6; color:white; padding:15px; margin:0; text-align:center; }
+    a, button { display:inline-block; margin:5px 5px; padding:8px 16px; background:#0096c7; color:white; border-radius:6px; text-decoration:none; border:none; cursor:pointer; font-weight:600; }
+    a:hover, button:hover { background:#0077b6; }
+    #statusText { text-align:center; font-weight:bold; margin-top:10px; }
+
+    .container { display:flex; gap:20px; padding:15px; flex-wrap:wrap; }
+    .left, .right { background:white; border-radius:10px; padding:15px; box-shadow:0 4px 15px rgba(0,0,0,0.05); }
+    .left { flex:2; }
+    .right { flex:1; min-width:250px; }
+
+    canvas { width:100% !important; height:300px !important; margin-bottom:20px; }
+
+    .panel-card { display:flex; justify-content:space-between; align-items:center; padding:10px; margin-bottom:8px; border-radius:8px; background:#f9f9f9; box-shadow:0 2px 8px rgba(0,0,0,0.05); }
+    .panel-left { display:flex; align-items:center; gap:10px; }
+    .dot { width:14px; height:14px; border-radius:50%; }
+    .status-ok { background:#2ecc71; }
+    .status-fault { background:#e74c3c; }
+    .panel-info { font-size:13px; color:#555; }
+
+    table { width:100%; border-collapse:collapse; margin-top:15px; font-size:14px; }
+    th, td { border:1px solid #ccc; padding:6px 8px; text-align:center; }
+    th { background:#0077b6; color:white; }
+
+    .faulty-list { margin-top:15px; padding:10px; background:#fff3f3; border-left:5px solid #e74c3c; border-radius:6px; }
+    .faulty-list li { margin-bottom:5px; }
+
+    @media(max-width:900px){ .container { flex-direction:column; } }
+  </style>
+</head>
+<body>
+  {% with messages = get_flashed_messages() %}
+  {% if messages %}
+    {% for message in messages %}
+      <div style="
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+        padding: 10px;
+        border-radius: 5px;
+        width: 300px;
+        margin: 10px auto;
+        text-align: center;
+      ">
+        {{ message }}
+      </div>
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+<h1>🌞 Solar Panel Monitoring Dashboard</h1>
+<p id="statusText">System Monitoring...</p>
+
+<div style="text-align:center;">
+  <a href="/Update">Add Data</a>
+  <a href="/delete">Delete All</a>
+  <button onclick="startAutoUpdate()">Start Auto Update</button>
+  <button onclick="stopAutoUpdate()">Stop Auto Update</button>
+  <a href="/export">Export to CSV</a>
+  <a style="margin-left: 100px;" href="/logout">Log Out</a>
+</div>
+
+<div class="container">
+  <!-- LEFT: Graph -->
+  <div class="left">
+    <canvas id="powerChart" width="827" height="413"></canvas>
+
+    <!-- Dropdown for filtering -->
+    <div style="text-align:center; margin-top:10px;">
+      <label for="timeFilter">Show Data:</label>
+      <select id="timeFilter" onchange="updateGraph()">
+        <option value="today">Today</option>
+        <option value="month">This Month</option>
+        <option value="year">This Year</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- RIGHT: Panel Status -->
+  <div class="right">
+    <h3 style="text-align:center;color:#0077b6;">All Panels Status</h3>
+
+    {% for g in geta %}
+    <div class="panel-card">
+      <div class="panel-left">
+        <div class="dot {% if g.status == 'OK' or g.status == 'OK (No Sunlight)' %}status-ok{% else %}status-fault{% endif %}"></div>
+        <div>
+          <strong>{{ g.panel_no }}</strong><br>
+          <span class="panel-info">{{ g.timestamp.strftime('%H:%M:%S') }}</span>
+        </div>
+      </div>
+      <div>
+        {% if g.status == "OK" %}
+          <span style="color:#2ecc71;font-weight:700;">OK</span><br>
+        {% elif g.status == "OK (No Sunlight)" %}
+          <span style="color:yellowgreen;">OK (Low Sunlight)</span><br>
+        {% else %}
+          <span style="color:#e74c3c;font-weight:700;">FAULTY</span><br>
+        {% endif %}
+        <span class="panel-info">Power: {{ "%.2f"|format(g.power) }} W</span>
+      </div>
+    </div>
+    {% endfor %}
+
+    <!-- Summary -->
+    <div style="margin-top:15px;padding:10px;background:#f0f8ff;border-radius:8px;text-align:center;">
+      <strong>Total Panels:</strong> {{ total_panels }} <br>
+      <strong style="color:#e74c3c;">Faulty:</strong> {{ faulty_count }} <br>
+      <strong style="color:#2ecc71;">Active:</strong> {{ active_count }}
+      <div>
+        <h3 style="margin:0;color:#0077b6;">Total Power</h3>
+        <p style="margin:4px 0;font-size:18px;font-weight:600;">{{ total_power }} W</p>
+      </div>
+      <div>
+        <h3 style="margin:0;color:#8e44ad;">Power Balance</h3>
+        <p style="margin:4px 0;font-size:18px;font-weight:600;">{{ balance_power }} W</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Faulty Panel List -->
+<div class="faulty-list">
+  <strong>Faulty Panels:</strong>
+  <ul>
+    {% for d in data if d.status == 'Faulty' %}
+      <li>{{ d.panel_no }} is FAULTY at {{ d.timestamp }}</li>
+    {% else %}
+      <li>No faulty panels detected ✅</li>
+    {% endfor %}
+  </ul>
+</div>
+
+<!-- Table of all data -->
+<table>
+  <tr>
+    <th>Panel No</th>
+    <th>Date</th>
+    <th>Voltage</th>
+    <th>Current</th>
+    <th>Power</th>
+    <th>Efficiency</th>
+    <th>Status</th>
+    <th>Timestamp</th>
+  </tr>
+  {% for t in table_data %}
+  <tr>
+    <td>{{ t.panel_no }}</td>
+    <td>{{ t.timestamp.strftime('%Y-%m-%d')}}</td>
+    <td>{{ t.voltage }}</td>
+    <td>{{ t.current }}</td>
+    <td>{{ t.power }}</td>
+    <td>{{ t.efficiency }}</td>
+    <td>{{ t.status }}</td>
+    <td>{{ t.timestamp.strftime('%H:%M:%S') }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<script>
+let intervalId = null;
+let isRunning = localStorage.getItem("isRunning") === "true";
+
+function startAutoUpdate(){
+  if(!isRunning){
+    isRunning=true;
+    localStorage.setItem("isRunning","true");
+    document.getElementById("statusText").innerText="Auto updating every 5 seconds...";
+    intervalId = setInterval(updateData,5000);
+  }
+}
+function stopAutoUpdate(){
+  isRunning=false;
+  localStorage.setItem("isRunning","false");
+  document.getElementById("statusText").innerText="Auto update stopped";
+  clearInterval(intervalId);
+}
+async function updateData(){
+  if(isRunning){
+    await fetch('/update');
+    window.location.reload();
+  }
+}
+
+// Chart
+let chartInstance = null;
+const allData = {{ graph_data | tojson }};
+
+function filterData(filterType) {
+  const now = new Date();
+  return allData.filter(d => {
+    const dataDate = new Date(d.timestamp);
+    if(filterType === 'today') {
+      return dataDate.toDateString() === now.toDateString();
+    } else if(filterType === 'month') {
+      return dataDate.getMonth() === now.getMonth() && dataDate.getFullYear() === now.getFullYear();
+    } else if(filterType === 'year') {
+      return dataDate.getFullYear() === now.getFullYear();
+    }
+    return true;
+  });
+}
+
+function updateGraph() {
+  const filterType = document.getElementById('timeFilter').value;
+  const filteredData = filterData(filterType);
+
+  const labels = filteredData.map(d => d.panel_no);
+  const powerValues = filteredData.map(d => d.power);
+
+  if(chartInstance) chartInstance.destroy();
+
+  const ctx = document.getElementById('powerChart');
+  chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'Power Output (W)',
+        data: powerValues,
+        borderColor: '#0077b6',
+        backgroundColor: 'rgba(0,119,182,0.2)',
+        tension: 0.3,
+        fill: true
+      }]
+    },
+    options: {
+      scales: { y: { beginAtZero: true } },
+      plugins: { legend: { display: true, position: 'top' } }
+    }
+  });
+}
+
+document.addEventListener("DOMContentLoaded", function(){
+  if(isRunning){
+    document.getElementById("statusText").innerText="Auto updating every 5 seconds...";
+    intervalId = setInterval(updateData,5000);
+  }
+  updateGraph();
+});
+</script>
+
+</body>
+</html>
