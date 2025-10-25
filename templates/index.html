@@ -71,18 +71,44 @@
 <div class="container">
   <!-- LEFT: Graph -->
   <div class="left">
-    <canvas id="powerChart" width="827" height="413"></canvas>
+  <canvas id="powerChart" width="827" height="413"></canvas>
 
-    <!-- Dropdown for filtering -->
-    <div style="text-align:center; margin-top:10px;">
-      <label for="timeFilter">Show Data:</label>
-      <select id="timeFilter" onchange="updateGraph()">
-        <option value="today">Today</option>
-        <option value="month">This Month</option>
-        <option value="year">This Year</option>
-      </select>
-    </div>
+  <!-- Radio Buttons for filter -->
+  <div style="text-align:center; margin-top:10px;">
+    <label><input type="radio" name="filterType" value="today" checked onchange="updateFilter()"> Today</label>
+    <label><input type="radio" name="filterType" value="month" onchange="updateFilter()"> Monthly</label>
+    <label><input type="radio" name="filterType" value="year" onchange="updateFilter()"> Yearly</label>
   </div>
+
+  <!-- Dropdowns (hidden until needed) -->
+  <div id="monthDropdownDiv" style="text-align:center; margin-top:10px; display:none;">
+    <label>Select Month:</label>
+    <select id="monthDropdown" onchange="updateGraph()">
+      <option value="1">January</option>
+      <option value="2">February</option>
+      <option value="3">March</option>
+      <option value="4">April</option>
+      <option value="5">May</option>
+      <option value="6">June</option>
+      <option value="7">July</option>
+      <option value="8">August</option>
+      <option value="9">September</option>
+      <option value="10">October</option>
+      <option value="11">November</option>
+      <option value="12">December</option>
+    </select>
+  </div>
+
+  <div id="yearDropdownDiv" style="text-align:center; margin-top:10px; display:none;">
+    <label>Select Year:</label>
+    <select id="yearDropdown" onchange="updateGraph()">
+      <option value="2023">2023</option>
+      <option value="2024">2024</option>
+      <option value="2025">2025</option>
+    </select>
+  </div>
+</div>
+
 
   <!-- RIGHT: Panel Status -->
   <div class="right">
@@ -198,26 +224,57 @@ function filterData(filterType) {
   const now = new Date();
   return allData.filter(d => {
     const dataDate = new Date(d.timestamp);
-    if(filterType === 'today') {
+    if (filterType === 'today') {
       return dataDate.toDateString() === now.toDateString();
-    } else if(filterType === 'month') {
-      return dataDate.getMonth() === now.getMonth() && dataDate.getFullYear() === now.getFullYear();
-    } else if(filterType === 'year') {
-      return dataDate.getFullYear() === now.getFullYear();
+    } else if (filterType === 'month') {
+      const selectedMonth = parseInt(document.getElementById("monthDropdown").value);
+      return dataDate.getMonth() + 1 === selectedMonth && dataDate.getFullYear() === now.getFullYear();
+    } else if (filterType === 'year') {
+      const selectedYear = parseInt(document.getElementById("yearDropdown").value);
+      return dataDate.getFullYear() === selectedYear;
     }
     return true;
   });
 }
 
+// 🧠 Chart update logic
 function updateGraph() {
-  const filterType = document.getElementById('timeFilter').value;
+  const filterType = document.querySelector('input[name="filterType"]:checked').value;
   const filteredData = filterData(filterType);
 
-  const labels = filteredData.map(d => d.panel_no);
-  const powerValues = filteredData.map(d => d.power);
+  let labels = [];
+  let powerValues = [];
 
-  if(chartInstance) chartInstance.destroy();
+  if (filterType === 'today') {
+    // ✅ Today → show each panel’s power
+    labels = filteredData.map(d => d.panel_no);
+    powerValues = filteredData.map(d => d.power);
 
+  } else if (filterType === 'month') {
+    // ✅ Monthly → total power per date
+    const dailyTotals = {};
+    filteredData.forEach(d => {
+      const date = new Date(d.timestamp).getDate();
+      dailyTotals[date] = (dailyTotals[date] || 0) + d.power;
+    });
+    labels = Object.keys(dailyTotals).map(d => `Day ${d}`);
+    powerValues = Object.values(dailyTotals);
+
+  } else if (filterType === 'year') {
+    // ✅ Yearly → total power per month
+    const monthlyTotals = {};
+    filteredData.forEach(d => {
+      const month = new Date(d.timestamp).getMonth() + 1;
+      monthlyTotals[month] = (monthlyTotals[month] || 0) + d.power;
+    });
+    labels = Object.keys(monthlyTotals).map(m => monthName(m));
+    powerValues = Object.values(monthlyTotals);
+  }
+
+  // Destroy old chart
+  if (chartInstance) chartInstance.destroy();
+
+  // Create new chart
   const ctx = document.getElementById('powerChart');
   chartInstance = new Chart(ctx, {
     type: 'line',
@@ -229,24 +286,37 @@ function updateGraph() {
         borderColor: '#0077b6',
         backgroundColor: 'rgba(0,119,182,0.2)',
         tension: 0.3,
-        fill: true
+        fill: true,
+        pointRadius: 4,
+        pointHoverRadius: 6
       }]
     },
     options: {
-      scales: { y: { beginAtZero: true } },
+      scales: {
+        y: { beginAtZero: true },
+        x: { title: { display: true, text: (filterType === 'today') ? 'Panel No' : (filterType === 'month') ? 'Date' : 'Month' } }
+      },
       plugins: { legend: { display: true, position: 'top' } }
     }
   });
 }
 
-document.addEventListener("DOMContentLoaded", function(){
-  if(isRunning){
-    document.getElementById("statusText").innerText="Auto updating every 5 seconds...";
-    intervalId = setInterval(updateData,5000);
-  }
+// 🧩 Radio buttons logic
+function updateFilter() {
+  const filterType = document.querySelector('input[name="filterType"]:checked').value;
+  document.getElementById('monthDropdownDiv').style.display = (filterType === 'month') ? 'block' : 'none';
+  document.getElementById('yearDropdownDiv').style.display = (filterType === 'year') ? 'block' : 'none';
   updateGraph();
-});
-</script>
+}
 
+// 📆 Month name helper
+function monthName(num) {
+  const names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return names[num-1];
+}
+
+// Load default chart
+document.addEventListener("DOMContentLoaded", updateGraph);
+</script>
 </body>
 </html>
