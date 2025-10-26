@@ -44,8 +44,8 @@ def start():
 
 @app.route('/login',methods =["GET","POST"])
 def login():
-    email = "admin@123"      # yahan apna admin email likh sakte ho, jaise "admin@gmail.com"
-    password = "1234"   # aur password, jaise "1234"
+    email = "admin@123"
+    password = "1234"
 
     if request.method == "POST":
         name = request.form["email"]
@@ -95,7 +95,7 @@ def main():
         "efficiency": d.efficiency,
         "status": d.status,
         "timestamp": d.timestamp.strftime("%Y-%m-%d %H:%M:%S")
-    } for d in all_data
+    } for d in SolarData.query.all()
     ]
 
     return render_template("index.html", data=data, total_panels=total_panels, faulty_count=faulty_count, active_count=active_count, total_power=round(total_power, 2), balance_power=round(balance_power, 2), geta=latest_panels, table_data=all_data, graph_data=graph_data)
@@ -155,6 +155,48 @@ def export_csv():
     output.headers["Content-Disposition"] = "attachment; filename=solardata.csv"
     output.headers["Content-type"] = "text/csv"
     return output
+
+from datetime import timedelta
+
+@app.route('/generate_year_data')
+def generate_year_data():
+    start_date = datetime(2024, 1, 1)  # Last year se start
+    end_date = datetime(2024, 12, 31)
+
+    current_date = start_date
+    panels = 8  # 8 panels system
+
+    while current_date <= end_date:
+        for panel_no in range(1, panels + 1):
+            voltage = round(random.uniform(70, 100), 2)
+            current = round(random.uniform(2.5, 6.5), 2)
+            power = round(voltage * current / 10, 2)  # realistic scaled power
+            efficiency = round(random.uniform(70, 98), 2)
+
+            # realistic solar condition logic
+            if voltage < 75:
+                status = "FAULTY"
+            elif 75 <= voltage < 85:
+                status = "OK (Low Sunlight)"
+            else:
+                status = "OK"
+
+            # add record to DB
+            new_data = SolarData(
+                panel_no=panel_no,
+                voltage=voltage,
+                current=current,
+                power=power,
+                efficiency=efficiency,
+                status=status,
+                timestamp=current_date
+            )
+            db.session.add(new_data)
+        current_date += timedelta(days=1)  # next day
+
+    db.session.commit()
+    return "✅ 1 Year Dummy Data Generated Successfully!"
+
 
 if __name__=="__main__":
     with app.app_context():

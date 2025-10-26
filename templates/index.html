@@ -210,8 +210,8 @@ async function updateData(){
 }
 
 // Chart
-let chartInstance = null;
 const allData = {{ graph_data | tojson }};
+let chartInstance = null;
 
 function filterData(filterType) {
   const now = new Date();
@@ -230,21 +230,20 @@ function filterData(filterType) {
   });
 }
 
-// 🧠 Chart update logic
-function updateGraph() {
+// 🧠 Update both chart + table
+function updateGraphAndTable() {
   const filterType = document.querySelector('input[name="filterType"]:checked').value;
   const filteredData = filterData(filterType);
-
+  
+  // === CHART UPDATE ===
   let labels = [];
   let powerValues = [];
 
   if (filterType === 'today') {
-    // ✅ Today → show each panel’s power
     labels = filteredData.map(d => d.panel_no);
     powerValues = filteredData.map(d => d.power);
-
-  } else if (filterType === 'month') {
-    // ✅ Monthly → total power per date
+  } 
+  else if (filterType === 'month') {
     const dailyTotals = {};
     filteredData.forEach(d => {
       const date = new Date(d.timestamp).getDate();
@@ -252,9 +251,8 @@ function updateGraph() {
     });
     labels = Object.keys(dailyTotals).map(d => `Day ${d}`);
     powerValues = Object.values(dailyTotals);
-
-  } else if (filterType === 'year') {
-    // ✅ Yearly → total power per month
+  } 
+  else if (filterType === 'year') {
     const monthlyTotals = {};
     filteredData.forEach(d => {
       const month = new Date(d.timestamp).getMonth() + 1;
@@ -264,10 +262,7 @@ function updateGraph() {
     powerValues = Object.values(monthlyTotals);
   }
 
-  // Destroy old chart
   if (chartInstance) chartInstance.destroy();
-
-  // Create new chart
   const ctx = document.getElementById('powerChart');
   chartInstance = new Chart(ctx, {
     type: 'line',
@@ -279,22 +274,14 @@ function updateGraph() {
         borderColor: '#0077b6',
         backgroundColor: 'rgba(0,119,182,0.2)',
         tension: 0.3,
-        fill: true,
-        pointRadius: 4,
-        pointHoverRadius: 6
+        fill: true
       }]
     },
-    options: {
-      scales: {
-        y: { beginAtZero: true },
-        x: { title: { display: true, text: (filterType === 'today') ? 'Panel No' : (filterType === 'month') ? 'Date' : 'Month' } }
-      },
-      plugins: { legend: { display: true, position: 'top' } }
-    }
+    options: { scales: { y: { beginAtZero: true } } }
   });
-}
 
-const tableBody = document.getElementById("tableBody");
+  // === TABLE UPDATE ===
+  const tableBody = document.getElementById("tableBody");
   tableBody.innerHTML = "";
   filteredData.forEach(d => {
     const tr = document.createElement("tr");
@@ -312,22 +299,19 @@ const tableBody = document.getElementById("tableBody");
   });
 }
 
-// 🧩 Radio buttons logic
-function updateFilter() {
-  const filterType = document.querySelector('input[name="filterType"]:checked').value;
-  document.getElementById('monthDropdownDiv').style.display = (filterType === 'month') ? 'block' : 'none';
-  document.getElementById('yearDropdownDiv').style.display = (filterType === 'year') ? 'block' : 'none';
-  updateGraph();
-}
-
-// 📆 Month name helper
+// Month aur Year dropdown ke liye helper
 function monthName(num) {
   const names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
   return names[num-1];
 }
 
-// Load default chart
-document.addEventListener("DOMContentLoaded", updateGraph);
-</script>
+function updateFilter() {
+  const filterType = document.querySelector('input[name="filterType"]:checked').value;
+  document.getElementById('monthDropdownDiv').style.display = (filterType === 'month') ? 'block' : 'none';
+  document.getElementById('yearDropdownDiv').style.display = (filterType === 'year') ? 'block' : 'none';
+  updateGraphAndTable();
+}
+
+document.addEventListener("DOMContentLoaded", updateGraphAndTable);</script>
 </body>
 </html>
