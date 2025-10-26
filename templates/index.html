@@ -166,30 +166,23 @@
 </div>
 
 <!-- Table of all data -->
-<table>
-  <tr>
-    <th>Panel No</th>
-    <th>Date</th>
-    <th>Voltage</th>
-    <th>Current</th>
-    <th>Power</th>
-    <th>Efficiency</th>
-    <th>Status</th>
-    <th>Timestamp</th>
-  </tr>
-  {% for t in table_data %}
-  <tr>
-    <td>{{ t.panel_no }}</td>
-    <td>{{ t.timestamp.strftime('%Y-%m-%d')}}</td>
-    <td>{{ t.voltage }}</td>
-    <td>{{ t.current }}</td>
-    <td>{{ t.power }}</td>
-    <td>{{ t.efficiency }}</td>
-    <td>{{ t.status }}</td>
-    <td>{{ t.timestamp.strftime('%H:%M:%S') }}</td>
-  </tr>
-  {% endfor %}
-</table>
+<table id="dataTable">
+  <thead>
+    <tr>
+      <th>Panel No</th>
+      <th>Date</th>
+      <th>Voltage</th>
+      <th>Current</th>
+      <th>Power</th>
+      <th>Efficiency</th>
+      <th>Status</th>
+      <th>Timestamp</th>
+    </tr>
+  </thead>
+  <tbody id="tableBody">
+    <!-- Data will be dynamically filled -->
+  </tbody>
+</table>>
 
 <script>
 let intervalId = null;
@@ -298,6 +291,24 @@ function updateGraph() {
       },
       plugins: { legend: { display: true, position: 'top' } }
     }
+  });
+}
+
+const tableBody = document.getElementById("tableBody");
+  tableBody.innerHTML = "";
+  filteredData.forEach(d => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${d.panel_no}</td>
+      <td>${new Date(d.timestamp).toLocaleDateString()}</td>
+      <td>${d.voltage.toFixed(2)}</td>
+      <td>${d.current.toFixed(2)}</td>
+      <td>${d.power.toFixed(2)}</td>
+      <td>${d.efficiency.toFixed(2)}</td>
+      <td>${d.status}</td>
+      <td>${new Date(d.timestamp).toLocaleTimeString()}</td>
+    `;
+    tableBody.appendChild(tr);
   });
 }
 

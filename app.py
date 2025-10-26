@@ -88,10 +88,14 @@ def main():
 
     graph_data = [
         {
-            "panel_no": d.panel_no,
-            "power": d.power,
-            "timestamp": d.timestamp.isoformat()
-        } for d in all_data
+        "panel_no": d.panel_no,
+        "power": d.power,
+        "voltage": d.voltage,
+        "current": d.current,
+        "efficiency": d.efficiency,
+        "status": d.status,
+        "timestamp": d.timestamp.strftime("%Y-%m-%d %H:%M:%S")
+    } for d in all_data
     ]
 
     return render_template("index.html", data=data, total_panels=total_panels, faulty_count=faulty_count, active_count=active_count, total_power=round(total_power, 2), balance_power=round(balance_power, 2), geta=latest_panels, table_data=all_data, graph_data=graph_data)
