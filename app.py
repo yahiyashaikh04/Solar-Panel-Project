@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import csv,io,random
 from flask_mail import Mail,Message
+from collections import defaultdict
 
 app =Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///solardata.db"
@@ -98,7 +99,16 @@ def main():
     } for d in SolarData.query.all()
     ]
 
-    return render_template("index.html", data=data, total_panels=total_panels, faulty_count=faulty_count, active_count=active_count, total_power=round(total_power, 2), balance_power=round(balance_power, 2), geta=latest_panels, table_data=all_data, graph_data=graph_data)
+    seta = SolarData.query.all()
+
+    grouped = defaultdict(lambda: defaultdict(list))
+
+    for s in seta:
+        month = s.timestamp.strftime("%B")  # e.g. "January"
+        day = s.timestamp.strftime("%Y-%m-%d")
+        grouped[month][day].append(s)
+
+    return render_template("index.html", data=data, total_panels=total_panels, faulty_count=faulty_count, active_count=active_count, total_power=round(total_power, 2), balance_power=round(balance_power, 2), geta=latest_panels, table_data=all_data, graph_data=graph_data, grouped=grouped,)
 
 
 @app.route('/update')
@@ -155,47 +165,6 @@ def export_csv():
     output.headers["Content-Disposition"] = "attachment; filename=solardata.csv"
     output.headers["Content-type"] = "text/csv"
     return output
-
-from datetime import timedelta
-
-@app.route('/generate_year_data')
-def generate_year_data():
-    start_date = datetime(2024, 1, 1)  # Last year se start
-    end_date = datetime(2024, 12, 31)
-
-    current_date = start_date
-    panels = 8  # 8 panels system
-
-    while current_date <= end_date:
-        for panel_no in range(1, panels + 1):
-            voltage = round(random.uniform(70, 100), 2)
-            current = round(random.uniform(2.5, 6.5), 2)
-            power = round(voltage * current / 10, 2)  # realistic scaled power
-            efficiency = round(random.uniform(70, 98), 2)
-
-            # realistic solar condition logic
-            if voltage < 75:
-                status = "FAULTY"
-            elif 75 <= voltage < 85:
-                status = "OK (Low Sunlight)"
-            else:
-                status = "OK"
-
-            # add record to DB
-            new_data = SolarData(
-                panel_no=panel_no,
-                voltage=voltage,
-                current=current,
-                power=power,
-                efficiency=efficiency,
-                status=status,
-                timestamp=current_date
-            )
-            db.session.add(new_data)
-        current_date += timedelta(days=1)  # next day
-
-    db.session.commit()
-    return "✅ 1 Year Dummy Data Generated Successfully!"
 
 
 if __name__=="__main__":

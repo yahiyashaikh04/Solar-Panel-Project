@@ -165,24 +165,59 @@
   </ul>
 </div>
 
-<!-- Table of all data -->
 <table id="dataTable">
   <thead>
     <tr>
-      <th>Panel No</th>
+      <th></th>
+      <th>Month</th>
       <th>Date</th>
+      <th>Panel No</th>
       <th>Voltage</th>
       <th>Current</th>
       <th>Power</th>
       <th>Efficiency</th>
       <th>Status</th>
-      <th>Timestamp</th>
     </tr>
   </thead>
-  <tbody id="tableBody">
-    <!-- Data will be dynamically filled -->
+  <tbody>
+    {% for month, days in grouped.items() %}
+    <!-- MONTH ROW -->
+    <tr class="month-row" style="background:#0077b6;color:white;font-weight:600;">
+      <td><button class="btn" onclick="toggleDays('{{ month }}')">+</button></td>
+      <td>{{ month }}</td>
+      <td colspan="7" style="text-align:center;">Monthly Total</td>
+      <td>{{ total_power }}</td>
+    </tr>
+
+    {% for day, panels in days.items() %}
+    <!-- DAY ROW (Initially Hidden) -->
+    <tr class="day-row month-{{ month }}" style="display:none;background:#dff6ff;font-weight:500;">
+      <td><button class="btn" onclick="togglePanels('{{ month }}','{{ day }}')">+</button></td>
+      <td></td>
+      <td>{{ day }}</td>
+      <td colspan="5" style="text-align:center;">Day Total</td>
+      <td> Active Panel: {{ active_count }}</td>
+    </tr>
+
+    {% for p in panels %}
+    <!-- PANEL ROW (Initially Hidden) -->
+    <tr class="panel-row month-{{ month }} day-{{ day }}" style="display:none;background:#f9f9f9;">
+      <td></td>
+      <td></td>
+      <td>{{ p.timestamp.strftime('%Y-%m-%d') }}</td>
+      <td>{{ p.panel_no }}</td>
+      <td>{{ "%.2f"|format(p.voltage) }}</td>
+      <td>{{ "%.2f"|format(p.current) }}</td>
+      <td>{{ "%.2f"|format(p.power) }}</td>
+      <td>{{ "%.2f"|format(p.efficiency) }}</td>
+      <td>{{ p.status }}</td>
+    </tr>
+    {% endfor %}
+    {% endfor %}
+    {% endfor %}
   </tbody>
-</table>>
+</table>
+
 
 <script>
 let intervalId = null;
@@ -312,6 +347,31 @@ function updateFilter() {
   updateGraphAndTable();
 }
 
-document.addEventListener("DOMContentLoaded", updateGraphAndTable);</script>
+document.addEventListener("DOMContentLoaded", updateGraphAndTable);
+
+function toggleDays(month){
+  const days = document.querySelectorAll(`.month-${month}`);
+  const button = event.target;
+  const expanded = button.textContent === "-";
+  days.forEach(row => row.style.display = expanded ? "none" : "");
+  button.textContent = expanded ? "+" : "-";
+
+  // collapse panel rows when closing month
+  if(expanded){
+    const panels = document.querySelectorAll(`.panel-row.month-${month}`);
+    panels.forEach(p => p.style.display = "none");
+    const innerButtons = document.querySelectorAll(`.day-row.month-${month} .btn`);
+    innerButtons.forEach(b => b.textContent = "+");
+  }
+}
+
+function togglePanels(month, day){
+  const panels = document.querySelectorAll(`.panel-row.month-${month}.day-${day}`);
+  const button = event.target;
+  const expanded = button.textContent === "-";
+  panels.forEach(p => p.style.display = expanded ? "none" : "");
+  button.textContent = expanded ? "+" : "-";
+}
+</script>
 </body>
 </html>
