@@ -4,6 +4,7 @@ from datetime import datetime
 import csv,io,random
 from flask_mail import Mail,Message
 from collections import defaultdict
+from sqlalchemy import extract
 
 app =Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///solardata.db"
@@ -99,16 +100,36 @@ def main():
     } for d in SolarData.query.all()
     ]
 
-    seta = SolarData.query.all()
+    year = request.args.get("year", datetime.now().year, type=int)
+    years = [y[0] for y in db.session.query(extract('year', SolarData.timestamp)).distinct()]
 
+    seta = SolarData.query.filter(extract('year', SolarData.timestamp) == year).all()
     grouped = defaultdict(lambda: defaultdict(list))
+    monthly_totals = {}
+    yearly = {"voltage":0, "current":0, "power":0, "efficiency":0, "count":0}
 
     for s in seta:
-        month = s.timestamp.strftime("%B")  # e.g. "January"
+        month = s.timestamp.strftime("%B")
         day = s.timestamp.strftime("%Y-%m-%d")
         grouped[month][day].append(s)
 
-    return render_template("index.html", data=data, total_panels=total_panels, faulty_count=faulty_count, active_count=active_count, total_power=round(total_power, 2), balance_power=round(balance_power, 2), geta=latest_panels, table_data=all_data, graph_data=graph_data, grouped=grouped,)
+    # Monthly totals
+    for month, days in grouped.items():
+        total_v = sum(p.voltage for panels in days.values() for p in panels)
+        total_c = sum(p.current for panels in days.values() for p in panels)
+        total_p = sum(p.power for panels in days.values() for p in panels)
+        total_e = sum(p.efficiency for panels in days.values() for p in panels) / sum(len(panels) for panels in days.values())
+        count = sum(len(panels) for panels in days.values())
+        monthly_totals[month] = dict(voltage=total_v, current=total_c, power=total_p, efficiency=total_e, count=count, status="OK")
+
+        yearly["voltage"] += total_v
+        yearly["current"] += total_c
+        yearly["power"] += total_p
+        yearly["efficiency"] += total_e
+        yearly["count"] += count
+
+
+    return render_template("index.html", data=data, total_panels=total_panels, faulty_count=faulty_count, active_count=active_count, total_power=round(total_power, 2), balance_power=round(balance_power, 2), geta=latest_panels, table_data=all_data, graph_data=graph_data, grouped=grouped, monthly_totals=monthly_totals, yearly_totals=yearly, years=years, selected_year=year)
 
 
 @app.route('/update')

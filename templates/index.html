@@ -165,10 +165,23 @@
   </ul>
 </div>
 
-<table id="dataTable">
-  <thead>
+<h2 style="text-align:center;color:#0077b6;">📊 Solar Panel Summary Table</h2>
+
+<!-- YEAR SELECT DROPDOWN -->
+<div style="text-align:center;margin-bottom:15px;">
+  <label for="yearSelect" style="font-weight:bold;color:#0077b6;">Select Year:</label>
+  <select id="yearSelect" onchange="filterByYear()" style="padding:6px 10px;border-radius:6px;">
+    {% for year in years %}
+      <option value="{{ year }}" {% if year == selected_year %}selected{% endif %}>{{ year }}</option>
+    {% endfor %}
+  </select>
+</div>
+
+<!-- TABLE -->
+<table id="dataTable" border="1" cellspacing="0" cellpadding="6" style="width:100%;border-collapse:collapse;">
+  <thead style="background:#0077b6;color:white;">
     <tr>
-      <th></th>
+      <th style="width:50px;"></th>
       <th>Month</th>
       <th>Date</th>
       <th>Panel No</th>
@@ -177,7 +190,7 @@
       <th>Power</th>
       <th>Efficiency</th>
       <th>Status</th>
-      <th>Total</th>
+      <th>Total / Count</th>
     </tr>
   </thead>
   <tbody>
@@ -186,22 +199,32 @@
     <tr class="month-row" style="background:#0077b6;color:white;font-weight:600;">
       <td><button class="btn" onclick="toggleDays('{{ month }}')">+</button></td>
       <td>{{ month }}</td>
-      <td colspan="7" style="text-align:center;">Monthly Total</td>
-      <td>{{ total_power }}</td>
+      <td colspan="2" style="text-align:center;">Monthly Total</td>
+      <td>{{ "%.2f"|format(monthly_totals[month].voltage) }}</td>
+      <td>{{ "%.2f"|format(monthly_totals[month].current) }}</td>
+      <td>{{ "%.2f"|format(monthly_totals[month].power) }}</td>
+      <td>{{ "%.2f"|format(monthly_totals[month].efficiency) }}</td>
+      <td>{{ monthly_totals[month].status }}</td>
+      <td>{{ monthly_totals[month].count }}</td>
     </tr>
 
     {% for day, panels in days.items() %}
-    <!-- DAY ROW (Initially Hidden) -->
+    <!-- DAY ROW -->
     <tr class="day-row month-{{ month }}" style="display:none;background:#dff6ff;font-weight:500;">
       <td><button class="btn" onclick="togglePanels('{{ month }}','{{ day }}')">+</button></td>
       <td></td>
       <td>{{ day }}</td>
-      <td colspan="5" style="text-align:center;">Day Total</td>
-      <td> Active Panel: {{ active_count }}</td>
+      <td colspan="1" style="text-align:center;">Day Total</td>
+      <td>{{ "%.2f"|format(panels|sum(attribute='voltage')) }}</td>
+      <td>{{ "%.2f"|format(panels|sum(attribute='current')) }}</td>
+      <td>{{ "%.2f"|format(panels|sum(attribute='power')) }}</td>
+      <td>{{ "%.2f"|format(panels|sum(attribute='efficiency') / panels|length) }}</td>
+      <td>Active Panels: {{ panels|length }}</td>
+      <td></td>
     </tr>
 
     {% for p in panels %}
-    <!-- PANEL ROW (Initially Hidden) -->
+    <!-- PANEL ROW -->
     <tr class="panel-row month-{{ month }} day-{{ day }}" style="display:none;background:#f9f9f9;">
       <td></td>
       <td></td>
@@ -212,12 +235,34 @@
       <td>{{ "%.2f"|format(p.power) }}</td>
       <td>{{ "%.2f"|format(p.efficiency) }}</td>
       <td>{{ p.status }}</td>
+      <td></td>
     </tr>
     {% endfor %}
     {% endfor %}
+
+    <!-- MONTH FOOTER -->
+    <tr style="background:#caf0f8;font-weight:600;text-align:center;">
+      <td colspan="4">Total for {{ month }}</td>
+      <td>{{ "%.2f"|format(monthly_totals[month].voltage) }}</td>
+      <td>{{ "%.2f"|format(monthly_totals[month].current) }}</td>
+      <td>{{ "%.2f"|format(monthly_totals[month].power) }}</td>
+      <td>{{ "%.2f"|format(monthly_totals[month].efficiency) }}</td>
+      <td colspan="2"></td>
+    </tr>
     {% endfor %}
+
+    <!-- YEAR TOTAL FOOTER -->
+    <tr style="background:#90e0ef;font-weight:700;text-align:center;">
+      <td colspan="4">Yearly Total</td>
+      <td>{{ "%.2f"|format(yearly_totals.voltage) }}</td>
+      <td>{{ "%.2f"|format(yearly_totals.current) }}</td>
+      <td>{{ "%.2f"|format(yearly_totals.power) }}</td>
+      <td>{{ "%.2f"|format(yearly_totals.efficiency) }}</td>
+      <td colspan="2">Records: {{ yearly_totals.count }}</td>
+    </tr>
   </tbody>
 </table>
+
 
 
 <script>
@@ -354,15 +399,15 @@ function toggleDays(month){
   const days = document.querySelectorAll(`.month-${month}`);
   const button = event.target;
   const expanded = button.textContent === "-";
-  days.forEach(row => row.style.display = expanded ? "none" : "");
+  days.forEach(row => row.style.display = expanded ? "none" : "table-row");
   button.textContent = expanded ? "+" : "-";
 
-  // collapse panel rows when closing month
+  // Collapse panel rows when closing month
   if(expanded){
     const panels = document.querySelectorAll(`.panel-row.month-${month}`);
     panels.forEach(p => p.style.display = "none");
-    const innerButtons = document.querySelectorAll(`.day-row.month-${month} .btn`);
-    innerButtons.forEach(b => b.textContent = "+");
+    const innerBtns = document.querySelectorAll(`.day-row.month-${month} .btn`);
+    innerBtns.forEach(b => b.textContent = "+");
   }
 }
 
@@ -370,9 +415,15 @@ function togglePanels(month, day){
   const panels = document.querySelectorAll(`.panel-row.month-${month}.day-${day}`);
   const button = event.target;
   const expanded = button.textContent === "-";
-  panels.forEach(p => p.style.display = expanded ? "none" : "");
+  panels.forEach(p => p.style.display = expanded ? "none" : "table-row");
   button.textContent = expanded ? "+" : "-";
 }
+
+function filterByYear(){
+  const selectedYear = document.getElementById('yearSelect').value;
+  window.location.href = `/main?year=${selectedYear}`;
+}
+
 </script>
 </body>
 </html>
