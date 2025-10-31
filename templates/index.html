@@ -395,29 +395,34 @@ function updateFilter() {
 
 document.addEventListener("DOMContentLoaded", updateGraphAndTable);
 
-function toggleDays(month){
-  const days = document.querySelectorAll(`.month-${month}`);
-  const button = event.target;
-  const expanded = button.textContent === "-";
-  days.forEach(row => row.style.display = expanded ? "none" : "table-row");
-  button.textContent = expanded ? "+" : "-";
+ function toggleDays(month) {
+    const dayRows = document.querySelectorAll(`.day-row.month-${month}`);
+    const btn = event.target;
+    const isVisible = [...dayRows].some(row => row.style.display === "table-row");
 
-  // Collapse panel rows when closing month
-  if(expanded){
-    const panels = document.querySelectorAll(`.panel-row.month-${month}`);
-    panels.forEach(p => p.style.display = "none");
-    const innerBtns = document.querySelectorAll(`.day-row.month-${month} .btn`);
-    innerBtns.forEach(b => b.textContent = "+");
+    // Collapse all first
+    dayRows.forEach(row => row.style.display = "none");
+    document.querySelectorAll(`.panel-row.month-${month}`).forEach(row => row.style.display = "none");
+    document.querySelectorAll(`.day-row.month-${month} .btn`).forEach(b => b.textContent = "+");
+
+    if (!isVisible) {
+      dayRows.forEach(row => row.style.display = "table-row");
+      btn.textContent = "-";
+    } else {
+      btn.textContent = "+";
+    }
   }
-}
 
-function togglePanels(month, day){
-  const panels = document.querySelectorAll(`.panel-row.month-${month}.day-${day}`);
-  const button = event.target;
-  const expanded = button.textContent === "-";
-  panels.forEach(p => p.style.display = expanded ? "none" : "table-row");
-  button.textContent = expanded ? "+" : "-";
-}
+  function togglePanels(month, day) {
+    const panelRows = document.querySelectorAll(`.panel-row.month-${month}.day-${day}`);
+    const btn = event.target;
+    const isVisible = [...panelRows].some(row => row.style.display === "table-row");
+
+    // Collapse all panels for this day first
+    panelRows.forEach(row => row.style.display = isVisible ? "none" : "table-row");
+
+    btn.textContent = isVisible ? "+" : "-";
+  }
 
 function filterByYear(){
   const selectedYear = document.getElementById('yearSelect').value;
