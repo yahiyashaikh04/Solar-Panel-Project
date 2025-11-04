@@ -39,6 +39,7 @@ def send_faulty_email():
 
         msg = Message(subject="⚠️ Solar Panel Alert", recipients=["recipient_email@gmail.com"], body=body)
         mail.send(msg)
+
 @app.route('/')
 def start():
 
