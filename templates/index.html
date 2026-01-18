@@ -75,8 +75,9 @@
 
   <div style="text-align:center; margin-top:10px;">
   <label>Select Year:</label>
-  <select id="yearSelect" onchange="handleYearChange()" style="margin-left:5px;">
-    <option value="2025" selected>2025</option>
+  <select id="graphYearSelect" onchange="handleYearChange()" style="margin-left:5px;">
+    <option value="2026" selected>2026</option>
+    <option value="2025">2025</option>
     <option value="2024">2024</option>
     <option value="2023">2023</option>
   </select>
@@ -92,7 +93,7 @@
 <!-- 🔹 Dropdowns (hidden until needed, unchanged design) -->
 <div id="monthDropdownDiv" style="text-align:center; margin-top:10px; display:none;">
   <label>Select Month:</label>
-  <select id="monthDropdown" onchange="updateGraph()">
+  <select id="monthDropdown" onchange="updateGraphAndTable()">
     <option value="1">January</option>
     <option value="2">February</option>
     <option value="3">March</option>
@@ -110,7 +111,7 @@
 
 <div id="yearDropdownDiv" style="text-align:center; margin-top:10px; display:none;">
   <label>Select Year:</label>
-  <select id="yearDropdown" onchange="updateGraph()">
+  <select id="yearDropdown" onchange="updateGraphAndTable()">
     <option value="2023">2023</option>
     <option value="2024">2024</option>
     <option value="2025">2025</option>
@@ -275,177 +276,164 @@
 
 
 <script>
-let intervalId = null;
-let isRunning = localStorage.getItem("isRunning") === "true";
-
-function startAutoUpdate(){
-  if(!isRunning){
-    isRunning=true;
-    localStorage.setItem("isRunning","true");
-    document.getElementById("statusText").innerText="Auto updating every 5 seconds...";
-    intervalId = setInterval(updateData,5000);
-  }
-}
-function stopAutoUpdate(){
-  isRunning=false;
-  localStorage.setItem("isRunning","false");
-  document.getElementById("statusText").innerText="Auto update stopped";
-  clearInterval(intervalId);
-}
-async function updateData(){
-  if(isRunning){
-    await fetch('/update');
-    window.location.reload();
-  }
-}
-
-// Chart
 const allData = {{ graph_data | tojson }};
 let chartInstance = null;
+const currentYear = new Date().getFullYear();
 
+/* =====================
+   FILTER DATA
+===================== */
 function filterData(filterType) {
-  const now = new Date();
+  const selectedYear = parseInt(
+    document.getElementById("graphYearSelect").value
+  );
+
   return allData.filter(d => {
     const dataDate = new Date(d.timestamp);
-    if (filterType === 'today') {
-      return dataDate.toDateString() === now.toDateString();
-    } else if (filterType === 'month') {
-      const selectedMonth = parseInt(document.getElementById("monthDropdown").value);
-      return dataDate.getMonth() + 1 === selectedMonth && dataDate.getFullYear() === now.getFullYear();
-    } else if (filterType === 'year') {
-      const selectedYear = parseInt(document.getElementById("yearDropdown").value);
+
+    if (filterType === "today") {
+      return (
+        selectedYear === currentYear &&
+        dataDate.toDateString() === new Date().toDateString()
+      );
+    }
+
+    if (filterType === "month") {
+      const selectedMonth = parseInt(
+        document.getElementById("monthDropdown").value
+      );
+      return (
+        dataDate.getMonth() + 1 === selectedMonth &&
+        dataDate.getFullYear() === selectedYear
+      );
+    }
+
+    if (filterType === "year") {
       return dataDate.getFullYear() === selectedYear;
     }
+
     return true;
   });
 }
 
-// 🧠 Update both chart + table
+/* =====================
+   GRAPH UPDATE
+===================== */
 function updateGraphAndTable() {
-  const filterType = document.querySelector('input[name="filterType"]:checked').value;
+  const filterType = document.querySelector(
+    'input[name="filterType"]:checked'
+  ).value;
+
   const filteredData = filterData(filterType);
-  
-  // === CHART UPDATE ===
+
   let labels = [];
   let powerValues = [];
 
-  if (filterType === 'today') {
+  if (filterType === "today") {
     labels = filteredData.map(d => d.panel_no);
     powerValues = filteredData.map(d => d.power);
-  } 
-  else if (filterType === 'month') {
+  }
+
+  if (filterType === "month") {
     const dailyTotals = {};
     filteredData.forEach(d => {
-      const date = new Date(d.timestamp).getDate();
-      dailyTotals[date] = (dailyTotals[date] || 0) + d.power;
+      const day = new Date(d.timestamp).getDate();
+      dailyTotals[day] = (dailyTotals[day] || 0) + d.power;
     });
     labels = Object.keys(dailyTotals).map(d => `Day ${d}`);
     powerValues = Object.values(dailyTotals);
-  } 
-  else if (filterType === 'year') {
+  }
+
+  if (filterType === "year") {
     const monthlyTotals = {};
     filteredData.forEach(d => {
-      const month = new Date(d.timestamp).getMonth() + 1;
-      monthlyTotals[month] = (monthlyTotals[month] || 0) + d.power;
+      const m = new Date(d.timestamp).getMonth();
+      monthlyTotals[m] = (monthlyTotals[m] || 0) + d.power;
     });
-    labels = Object.keys(monthlyTotals).map(m => monthName(m));
+    labels = Object.keys(monthlyTotals).map(
+      m => ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m]
+    );
     powerValues = Object.values(monthlyTotals);
   }
 
   if (chartInstance) chartInstance.destroy();
-  const ctx = document.getElementById('powerChart');
-  chartInstance = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'Power Output (W)',
-        data: powerValues,
-        borderColor: '#0077b6',
-        backgroundColor: 'rgba(0,119,182,0.2)',
-        tension: 0.3,
-        fill: true
-      }]
-    },
-    options: { scales: { y: { beginAtZero: true } } }
-  });
 
-  // === TABLE UPDATE ===
-  const tableBody = document.getElementById("tableBody");
-  tableBody.innerHTML = "";
-  filteredData.forEach(d => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${d.panel_no}</td>
-      <td>${new Date(d.timestamp).toLocaleDateString()}</td>
-      <td>${d.voltage.toFixed(2)}</td>
-      <td>${d.current.toFixed(2)}</td>
-      <td>${d.power.toFixed(2)}</td>
-      <td>${d.efficiency.toFixed(2)}</td>
-      <td>${d.status}</td>
-      <td>${new Date(d.timestamp).toLocaleTimeString()}</td>
-    `;
-    tableBody.appendChild(tr);
+  chartInstance = new Chart(
+    document.getElementById("powerChart"),
+    {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          label: "Power Output (W)",
+          data: powerValues,
+          borderColor: "#0077b6",
+          backgroundColor: "rgba(0,119,182,0.2)",
+          tension: 0.3,
+          fill: true
+        }]
+      },
+      options: {
+        responsive: true,
+        scales: { y: { beginAtZero: true } }
+      }
+    }
+  );
+}
+
+/* =========================
+   TOGGLE MONTH → DAYS
+========================= */
+function toggleDays(month) {
+  const rows = document.querySelectorAll(".day-row.month-" + month);
+  rows.forEach(row => {
+    row.style.display = (row.style.display === "none" || row.style.display === "")
+      ? "table-row"
+      : "none";
   });
 }
 
-// Month aur Year dropdown ke liye helper
-function monthName(num) {
-  const names = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  return names[num-1];
+/* =========================
+   TOGGLE DAY → PANELS
+========================= */
+function togglePanels(month, day) {
+  const rows = document.querySelectorAll(
+    ".panel-row.month-" + month + ".day-" + day
+  );
+  rows.forEach(row => {
+    row.style.display = (row.style.display === "none" || row.style.display === "")
+      ? "table-row"
+      : "none";
+  });
 }
 
+/* =====================
+   FILTER UI
+===================== */
 function updateFilter() {
-  const filterType = document.querySelector('input[name="filterType"]:checked').value;
-  document.getElementById('monthDropdownDiv').style.display = (filterType === 'month') ? 'block' : 'none';
-  document.getElementById('yearDropdownDiv').style.display = (filterType === 'year') ? 'block' : 'none';
+  const filterType = document.querySelector(
+    'input[name="filterType"]:checked'
+  ).value;
+
+  document.getElementById("monthDropdownDiv").style.display =
+    filterType === "month" ? "block" : "none";
+
+  document.getElementById("yearDropdownDiv").style.display =
+    filterType === "year" ? "block" : "none";
+
   updateGraphAndTable();
 }
 
-document.addEventListener("DOMContentLoaded", updateGraphAndTable);
-
- function toggleDays(month) {
-    const dayRows = document.querySelectorAll(`.day-row.month-${month}`);
-    const btn = event.target;
-    const isVisible = [...dayRows].some(row => row.style.display === "table-row");
-
-    // Collapse all first
-    dayRows.forEach(row => row.style.display = "none");
-    document.querySelectorAll(`.panel-row.month-${month}`).forEach(row => row.style.display = "none");
-    document.querySelectorAll(`.day-row.month-${month} .btn`).forEach(b => b.textContent = "+");
-
-    if (!isVisible) {
-      dayRows.forEach(row => row.style.display = "table-row");
-      btn.textContent = "-";
-    } else {
-      btn.textContent = "+";
-    }
-  }
-
-  function togglePanels(month, day) {
-    const panelRows = document.querySelectorAll(`.panel-row.month-${month}.day-${day}`);
-    const btn = event.target;
-    const isVisible = [...panelRows].some(row => row.style.display === "table-row");
-
-    // Collapse all panels for this day first
-    panelRows.forEach(row => row.style.display = isVisible ? "none" : "table-row");
-
-    btn.textContent = isVisible ? "+" : "-";
-  }
-
-function filterByYear(){
-  const selectedYear = document.getElementById('yearSelect').value;
-  window.location.href = `/main?year=${selectedYear}`;
-}
-
-const currentYear = new Date().getFullYear();
-
-// 🔹 When user changes the top year dropdown
+/* =====================
+   YEAR CHANGE
+===================== */
 function handleYearChange() {
-  const selectedYear = parseInt(document.getElementById("yearSelect").value);
+  const selectedYear = parseInt(
+    document.getElementById("graphYearSelect").value
+  );
+
   const todayLabel = document.getElementById("todayLabel");
 
-  // hide or show "Today" radio button
   if (selectedYear !== currentYear) {
     todayLabel.style.display = "none";
     document.querySelector('input[value="month"]').checked = true;
@@ -455,32 +443,19 @@ function handleYearChange() {
 
   updateGraphAndTable();
 }
-
-// 🔹 Existing functions (unchanged)
-function updateFilter() {
-  const selectedFilter = document.querySelector('input[name="filterType"]:checked').value;
-  document.getElementById("monthDropdownDiv").style.display = "none";
-  document.getElementById("yearDropdownDiv").style.display = "none";
-
-  if (selectedFilter === "month") {
-    document.getElementById("monthDropdownDiv").style.display = "block";
-  } else if (selectedFilter === "year") {
-    document.getElementById("yearDropdownDiv").style.display = "block";
-  }
-
-  updateGraph();
+function filterByYear() {
+  const year = document.getElementById("yearSelect").value;
+  window.location.href = "/main?year=" + year;
 }
 
-// 🔹 Just for safety - placeholder for your existing chart update
-function updateGraph() {
-  updateGraphAndTable();
-}
-
-// Initialize on page load
-window.onload = function() {
+/* =====================
+   INIT
+===================== */
+window.addEventListener("DOMContentLoaded", () => {
   handleYearChange();
   updateGraphAndTable();
-};
+});
+
 </script>
-</body>
+  </body>
 </html>
