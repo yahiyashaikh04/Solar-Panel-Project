@@ -1,10 +1,11 @@
-from flask import Flask,render_template,redirect,url_for,flash,make_response,request,session
+from flask import Flask,render_template,redirect,url_for,flash,make_response,request,session,jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-import csv,io,random
+import csv,io,random,string
 from flask_mail import Mail,Message
 from collections import defaultdict
 from sqlalchemy import extract
+
 
 app =Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///solardata.db"
@@ -30,6 +31,20 @@ class SolarData(db.Model):
     status = db.Column(db.String(10), default="OK")
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
 
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    customer_id = db.Column(db.String(20), unique=True)
+    name = db.Column(db.String(100))
+    date_of_birth = db.Column(db.Date)
+    mobile = db.Column(db.String(15))
+    user_id = db.Column(db.String(50), unique=True)
+    password = db.Column(db.String(200))
+    country = db.Column(db.String(50))
+    company = db.Column(db.String(100))
+
+def generate_customer_id():
+    return "CUST-" + ''.join(random.choices(string.digits, k=6))
+
 def send_faulty_email():
     faulty_panels = SolarData.query.filter_by(status='Faulty').all()
     if faulty_panels:
@@ -45,27 +60,56 @@ def start():
 
     return render_template("login.html")
 
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        user = User(
+            customer_id = generate_customer_id(),
+            name = request.form["name"],
+            date_of_birth = datetime.strptime(request.form["dateof"], "%Y-%m-%d"),
+            mobile = request.form["mobile"],
+            user_id = request.form["user_id"],
+            password = request.form["password"],  # (later hash karenge)
+            country = request.form["country"],
+            company = request.form["company"]
+        )
+        db.session.add(user)
+        db.session.commit()
+        flash("Registration successful")
+        return redirect("/login")
+
+    return render_template("register.html")
+
 @app.route('/login',methods =["GET","POST"])
 def login():
     email = "admin@123"
-    password = "1234"
+    pess = "1234"
 
     if request.method == "POST":
         name = request.form["email"]
         puss = request.form["password"]
 
-        if name == email and puss == password:
+        if name == email and puss == pess:
             flash("Login Successful!!....")
-            return redirect(url_for('main'))
+            return redirect(url_for('admin_dashboard'))
+
+
+        user = User.query.filter_by(user_id=name,password=puss).first()
+
+        if user:
+            flash("Thank you for login")
+            return redirect(url_for("main"))
+
         else:
-            flash("Login Failed. Please Try Again....")
-            return redirect(url_for('login'))
+            flash("Please correct username and password")
+            return redirect(url_for("login"))
 
     return render_template("login.html")
 
 
 @app.route('/main')
 def main():
+    current_user = User.query.order_by(User.customer_id.asc()).first()
     data = SolarData.query.order_by(SolarData.timestamp.asc()).all()
 
     total_panels = len(set([d.panel_no for d in data]))
@@ -130,7 +174,7 @@ def main():
         yearly["count"] += count
 
 
-    return render_template("index.html", data=data, total_panels=total_panels, faulty_count=faulty_count, active_count=active_count, total_power=round(total_power, 2), balance_power=round(balance_power, 2), geta=latest_panels, table_data=all_data, graph_data=graph_data, grouped=grouped, monthly_totals=monthly_totals, yearly_totals=yearly, years=years, selected_year=year)
+    return render_template("user_dashboard.html", data=data, total_panels=total_panels, faulty_count=faulty_count, active_count=active_count, total_power=round(total_power, 2), balance_power=round(balance_power, 2), geta=latest_panels, table_data=all_data, graph_data=graph_data, grouped=grouped, monthly_totals=monthly_totals, yearly_totals=yearly, years=years, selected_year=year,user=current_user)
 
 
 @app.route('/update')
@@ -161,7 +205,10 @@ def update_data():
         db.session.add(new_data)
     
     db.session.commit()
-    return redirect(url_for("main"))
+    return jsonify({
+        "status": "OK",
+        "message": "Data updated successfully"
+    })
 
 @app.route('/delete')
 def delete():
@@ -187,6 +234,22 @@ def export_csv():
     output.headers["Content-Disposition"] = "attachment; filename=solardata.csv"
     output.headers["Content-type"] = "text/csv"
     return output
+
+@app.route("/dashboard")
+def dashboard():
+    if "user_id" not in session:
+        return redirect("/login")
+
+    user = User.query.filter_by(user_id=session["user_id"]).first()
+
+    return render_template("user_dashboard.html", user=user)
+
+@app.route("/admin")
+def admin_dashboard():
+    
+
+    users = User.query.all()
+    return render_template("admin_dashboard.html", users=users)
 
 
 if __name__=="__main__":

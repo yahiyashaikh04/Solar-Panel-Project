@@ -34,6 +34,41 @@
     .faulty-list li { margin-bottom:5px; }
 
     @media(max-width:900px){ .container { flex-direction:column; } }
+/* Header container */
+.dashboard-header {
+  position: relative;
+  background: #0077b6;     /* SAME COLOR */
+  padding: 15px 20px;
+}
+
+/* Dashboard title */
+.dashboard-header h1 {
+  margin: 0;
+  color: white;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+/* Customer ID on right corner */
+.customer-id {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+
+  font-size: 13px;
+  color: #0077b6;
+  background: #ffffff;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-weight: 600;
+
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+
+
+
   </style>
 </head>
 <body>
@@ -56,7 +91,12 @@
   {% endif %}
 {% endwith %}
 
-<h1>🌞 Solar Panel Monitoring Dashboard</h1>
+<div class="dashboard-header">
+  <span class="customer-id">Customer ID: {{ user.customer_id }}</span>
+  <h1>🌞 Solar Panel Monitoring Dashboard</h1>
+</div>
+
+
 <p id="statusText">System Monitoring...</p>
 
 <div style="text-align:center;">
@@ -278,7 +318,44 @@
 <script>
 const allData = {{ graph_data | tojson }};
 let chartInstance = null;
+
 const currentYear = new Date().getFullYear();
+
+let updating = false;     // ❗ missing tha
+let intervalId = null;   // ❗ missing tha
+
+function startAutoUpdate() {
+    if (updating) return;
+
+    updating = true;
+    updateStatus("🟢 Auto Update Started");
+
+    intervalId = setInterval(() => {
+        fetch("/update")
+            .then(res => res.json())
+            .then(data => {
+                updateStatus(data.message);
+                updateGraphAndTable(); // graph + table refresh
+            })
+            .catch(err => {
+                updateStatus("❌ Update Failed");
+                console.error(err);
+            });
+    }, 5000);
+}
+function stopAutoUpdate() {
+    if (!updating) return;
+
+    updating = false;
+    clearInterval(intervalId);
+    intervalId = null;
+
+    updateStatus("⏸ Auto Update Stopped");
+}
+
+function updateStatus(text) {
+    document.getElementById("statusText").innerText = text;
+}
 
 /* =====================
    FILTER DATA
