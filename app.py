@@ -1,10 +1,53 @@
 from flask import Flask,render_template,redirect,url_for,flash,make_response,request,session,jsonify
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-import csv,io,random,string
+import csv,io,random,string,os
 from flask_mail import Mail,Message
 from collections import defaultdict
 from sqlalchemy import extract
+from dotenv import load_dotenv
+import os
+import serial, time
+
+load_dotenv()
+
+SERIAL_PORT = "/dev/ttyUSB0"   # baad me change kar sakta hai
+SERIAL_BAUD = 9600
+
+def read_from_serial(port=SERIAL_PORT, baud=SERIAL_BAUD):
+        try:
+            ser = serial.Serial(port, baud, timeout=2)
+            line = ser.readline().decode(errors="ignore").strip()
+            ser.close()
+
+            if not line:
+                return None
+
+        # expected: voltage,current
+            for panel_no in range(1, 9):
+                panel_no=f"PANEL-{panel_no}"
+
+            parts = line.split(",")
+            voltage = float(parts[0])
+            current = float(parts[1])
+
+            power = round(voltage * current, 2)
+            efficiency = round((power / 100) * 100, 2)
+
+            return voltage, current, power, efficiency
+
+        except Exception as e:
+            print("Serial Error:", e)
+            return None
+        
+def get_panel_status(efficiency):
+        if efficiency < 70:
+            send_faulty_email()
+            return "FAULTY"
+        elif efficiency < 80:
+            return "OK (Low Sunlight)"
+        else:
+            return "OK"
 
 
 app =Flask(__name__)
@@ -41,6 +84,7 @@ class User(db.Model):
     password = db.Column(db.String(200))
     country = db.Column(db.String(50))
     company = db.Column(db.String(100))
+    is_active = db.Column(db.Boolean, default=True)
 
 def generate_customer_id():
     return "CUST-" + ''.join(random.choices(string.digits, k=6))
@@ -80,36 +124,52 @@ def register():
 
     return render_template("register.html")
 
-@app.route('/login',methods =["GET","POST"])
+@app.route("/login", methods=["GET", "POST"])
 def login():
-    email = "admin@123"
-    pess = "1234"
+    ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
+    ADMIN_PASS = os.getenv("ADMIN_PASS")
+
 
     if request.method == "POST":
-        name = request.form["email"]
-        puss = request.form["password"]
+        email = request.form.get("email")
+        password = request.form.get("password")
 
-        if name == email and puss == pess:
-            flash("Login Successful!!....")
-            return redirect(url_for('admin_dashboard'))
+        # ================= ADMIN LOGIN =================
+        if email == ADMIN_EMAIL and password == ADMIN_PASS:
+            session["admin"] = True
+            flash("Admin Login Successful ✅")
+            return redirect(url_for("admin_dashboard"))
 
+        # ================= USER LOGIN =================
+        user = User.query.filter_by(user_id=email).first()
 
-        user = User.query.filter_by(user_id=name,password=puss).first()
+        if user and user.password == password:
+            if user.is_active:
+                session["user_id"] = user.user_id
+                flash("Login Successful ✅")
+                return redirect("/main")
+            else:
+                flash("Your account is deactivated ❌")
+                return redirect("/login")
 
-        if user:
-            flash("Thank you for login")
-            return redirect(url_for("main"))
-
-        else:
-            flash("Please correct username and password")
-            return redirect(url_for("login"))
+        # ================= INVALID =================
+        flash("Invalid User ID or Password ❌")
+        return redirect("/login")
 
     return render_template("login.html")
 
 
 @app.route('/main')
 def main():
-    current_user = User.query.order_by(User.customer_id.asc()).first()
+    if "user_id" not in session:
+        return redirect("/login")
+
+    # 🔑 sirf login hua user
+    user = User.query.filter_by(user_id=session["user_id"]).first()
+
+    # safety check
+    if not user:
+        return redirect("/login")
     data = SolarData.query.order_by(SolarData.timestamp.asc()).all()
 
     total_panels = len(set([d.panel_no for d in data]))
@@ -174,40 +234,41 @@ def main():
         yearly["count"] += count
 
 
-    return render_template("user_dashboard.html", data=data, total_panels=total_panels, faulty_count=faulty_count, active_count=active_count, total_power=round(total_power, 2), balance_power=round(balance_power, 2), geta=latest_panels, table_data=all_data, graph_data=graph_data, grouped=grouped, monthly_totals=monthly_totals, yearly_totals=yearly, years=years, selected_year=year,user=current_user)
+    return render_template("user_dashboard.html", data=data, total_panels=total_panels, faulty_count=faulty_count, active_count=active_count, total_power=round(total_power, 2), balance_power=round(balance_power, 2), geta=latest_panels, table_data=all_data, graph_data=graph_data, grouped=grouped, monthly_totals=monthly_totals, yearly_totals=yearly, years=years, selected_year=year,user=user)
 
 
 @app.route('/update')
 def update_data():
-    for panel_no in range(1, 9):
-        voltage = round(random.uniform(15, 20), 2)
-        current = round(random.uniform(0.8, 1.5), 2)
-        power = round(voltage * current, 2)
-        efficiency = round(random.uniform(70, 100), 2)
-        
-        if efficiency < 70:
-            send_faulty_email()
-            print("Message Sent...")
-            status = "FAULTY"
-        elif efficiency < 80:
-            status = "OK (No Sunlight)"
-        else:
-            status = "OK"
-        # Insert new record for history table
-        new_data = SolarData(
-            panel_no=f"PANEL-{panel_no}",
-            voltage=voltage,
-            current=current,
-            power=power,
-            efficiency=efficiency,
-            status=status
-        )
-        db.session.add(new_data)
-    
+    data = read_from_serial()
+
+    if not data:
+        return jsonify({"status": "ERROR", "message": "No serial data"})
+
+    voltage, current, power, efficiency = data
+    status = get_panel_status(efficiency)
+
+    new_data = SolarData(
+        panel_no="PANEL-1",   # baad me loop laga sakta hai
+        voltage=voltage,
+        current=current,
+        power=power,
+        efficiency=efficiency,
+        status=status
+    )
+
+    db.session.add(new_data)
     db.session.commit()
+
     return jsonify({
         "status": "OK",
-        "message": "Data updated successfully"
+        "message": "Data updated successfully",
+        "data": {
+            "voltage": voltage,
+            "current": current,
+            "power": power,
+            "efficiency": efficiency,
+            "status": status
+        }
     })
 
 @app.route('/delete')
@@ -251,6 +312,12 @@ def admin_dashboard():
     users = User.query.all()
     return render_template("admin_dashboard.html", users=users)
 
+@app.route("/toggle-user/<int:id>")
+def toggle_user(id):
+    user = User.query.get(id)
+    user.is_active = not user.is_active
+    db.session.commit()
+    return redirect("/admin")
 
 if __name__=="__main__":
     with app.app_context():

@@ -141,19 +141,34 @@
     <table>
         <thead>
             <tr>
+                <th>Name</th>
                 <th>User ID</th>
+                <th>Mobile No</th>
                 <th>Customer ID</th>
                 <th>Company</th>
                 <th>Country</th>
+                <th>Status</th>
             </tr>
         </thead>
         <tbody>
             {% for u in users %}
             <tr>
+                <td>{{ u.name }}</td>
                 <td>{{ u.user_id }}</td>
+                <td>{{ u.mobile }}</td>
                 <td>{{ u.customer_id }}</td>
                 <td>{{ u.company }}</td>
                 <td>{{ u.country }}</td>
+                 <td>
+                    <a href="/toggle-user/{{ u.id }}">
+                    {% if u.is_active %}
+                    Deactivate
+                    {% else %}
+                    Activate
+                    {% endif %}
+                    </a>
+                </td>
+
             </tr>
             {% endfor %}
         </tbody>
