@@ -406,56 +406,90 @@ function updateGraphAndTable() {
   let labels = [];
   let powerValues = [];
 
-  if (filterType === "today") {
-    labels = filteredData.map(d => d.panel_no);
-    powerValues = filteredData.map(d => d.power);
+  // ❗ no data guard
+  if (!filteredData || filteredData.length === 0) {
+    if (chartInstance) chartInstance.destroy();
+    return;
   }
 
-  if (filterType === "month") {
+  /* ================= TODAY ================= */
+  if (filterType === "today") {
+    const panelTotals = {};
+
+    filteredData.forEach(d => {
+      panelTotals[d.panel_no] =
+        (panelTotals[d.panel_no] || 0) + d.power;
+    });
+
+    labels = Object.keys(panelTotals);
+    powerValues = Object.values(panelTotals);
+  }
+
+  /* ================= MONTH ================= */
+  else if (filterType === "month") {
     const dailyTotals = {};
+
     filteredData.forEach(d => {
       const day = new Date(d.timestamp).getDate();
       dailyTotals[day] = (dailyTotals[day] || 0) + d.power;
     });
-    labels = Object.keys(dailyTotals).map(d => `Day ${d}`);
-    powerValues = Object.values(dailyTotals);
+
+    const sortedDays = Object.keys(dailyTotals)
+      .map(Number)
+      .sort((a, b) => a - b);
+
+    labels = sortedDays.map(d => `Day ${d}`);
+    powerValues = sortedDays.map(d => dailyTotals[d]);
   }
 
-  if (filterType === "year") {
+  /* ================= YEAR ================= */
+  else if (filterType === "year") {
     const monthlyTotals = {};
+
     filteredData.forEach(d => {
-      const m = new Date(d.timestamp).getMonth();
+      const m = new Date(d.timestamp).getMonth(); // 0–11
       monthlyTotals[m] = (monthlyTotals[m] || 0) + d.power;
     });
-    labels = Object.keys(monthlyTotals).map(
-      m => ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m]
-    );
-    powerValues = Object.values(monthlyTotals);
+
+    const sortedMonths = Object.keys(monthlyTotals)
+      .map(Number)
+      .sort((a, b) => a - b);
+
+    const monthNames = [
+      "Jan","Feb","Mar","Apr","May","Jun",
+      "Jul","Aug","Sep","Oct","Nov","Dec"
+    ];
+
+    labels = sortedMonths.map(m => monthNames[m]);
+    powerValues = sortedMonths.map(m => monthlyTotals[m]);
   }
 
+  /* ================= CHART ================= */
   if (chartInstance) chartInstance.destroy();
 
-  chartInstance = new Chart(
-    document.getElementById("powerChart"),
-    {
-      type: "line",
-      data: {
-        labels,
-        datasets: [{
-          label: "Power Output (W)",
-          data: powerValues,
-          borderColor: "#0077b6",
-          backgroundColor: "rgba(0,119,182,0.2)",
-          tension: 0.3,
-          fill: true
-        }]
-      },
-      options: {
-        responsive: true,
-        scales: { y: { beginAtZero: true } }
+  const ctx = document.getElementById("powerChart").getContext("2d");
+
+  chartInstance = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: labels,
+      datasets: [{
+        label: "Power Output (W)",
+        data: powerValues,
+        borderColor: "#0077b6",
+        backgroundColor: "rgba(0,119,182,0.2)",
+        tension: 0.3,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { beginAtZero: true }
       }
     }
-  );
+  });
 }
 
 /* =========================

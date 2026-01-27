@@ -141,7 +141,7 @@ def login():
             return redirect(url_for("admin_dashboard"))
 
         # ================= USER LOGIN =================
-        user = User.query.filter_by(user_id=email).first()
+        user = User.query.filter_by(user_id=email).first()  
 
         if user and user.password == password:
             if user.is_active:
